@@ -1,5 +1,5 @@
 import os from 'os'
-import { readdir, stat } from 'fs/promises'
+import { readdir, stat, writeFile, rename } from 'fs/promises'
 import path from 'path';
 
 let currentPath = os.homedir()
@@ -7,8 +7,15 @@ console.log(greeting())
 
 showPath()
 
+const commands = {
+  'ls': showList,
+  'add': addFile,
+  'rn': renameFile
+}
+
 process.stdin.on('data', (chunk) => {
   const data = chunk.toString().trim();
+  const command = data.split(' ')
 
   if (data === '.exit') {
     goodBuy();
@@ -17,6 +24,18 @@ process.stdin.on('data', (chunk) => {
 
   if (data === 'ls') {
     showList()
+  }
+
+  if (!commands[command[0]]) {
+    console.log('\nТакой команды нет\n')
+  }
+
+  if (command[0] === 'add') {
+    commands[command[0]](command[1])
+  }
+
+  if (command[0] === 'rn') {
+    commands[command[0]](command[1], command[2])
   }
 })
 
@@ -147,5 +166,28 @@ function goodBuy() {
   const name = getName();
 
   console.log(`\nThank you for using File Manager, ${name}, goodbye!`);
+}
+
+async function addFile(name) {
+  try {
+    await writeFile(path.join(currentPath, name), '', ()=> {
+      
+    })
+  } catch(err) {
+    console.log(err)
+  }
+}
+
+async function renameFile(pathFile, newName) {
+  try {
+    const name = pathFile.split('/').at(-1)
+    const oldPath = path.join(pathFile.startsWith(os.homedir()) ? null : currentPath, pathFile)
+    const newPath = path.join(pathFile.startsWith(os.homedir()) ? null : currentPath, pathFile.replace(name, ''), newName)
+    await rename(oldPath, newPath, () => {
+      
+    })
+  } catch(err) {
+    console.log(err)
+  }
 }
 
