@@ -1,7 +1,9 @@
 import os from 'os';
 import { readdir, stat, writeFile, rename, rm, copyFile as copy } from 'fs/promises';
 import path from 'path';
-import { getInfo } from './osSystem.js';
+import { getInfo } from './os/index.js';
+import { commands as zipCommands } from './zip/index.js';
+import { calculateHash } from './hash/index.js'
 
 let currentPath = os.homedir()
 console.log(greeting())
@@ -26,12 +28,21 @@ process.stdin.on('data', async (chunk) => {
     process.exit();
   }
 
+  if (command[0] === 'hash') {
+    console.log('here')
+    await calculateHash(getFullPath(command[1]))
+  }
+
   if (data === 'ls') {
     await showList()
   }
 
   if (command[0] === 'os') {
     getInfo(command[1])
+  }
+
+  if (command[0] in zipCommands) {
+    zipCommands[command[0]](getFullPath(command[1]), getFullPath(command[2]))
   }
 
   if (!commands[command[0]]) {
@@ -73,15 +84,11 @@ function getName() {
 function greeting() {
   const name = getName();
 
-  return `Welcome to the File Manager, ${name}!`;
+  return setColor(`Welcome to the File Manager, ${name}!`, 'yellow');
 }
 
 function showPath() {
-  console.log(`\nYou are currently in ${currentPath} >\n`)
-}
-
-function showCurrentDir() {
-  console.log()
+  console.log(setColor(`\nYou are currently in ${currentPath} > \n`, 'blue'))
 }
 
 async function showList() {
@@ -181,7 +188,7 @@ function showTemplate(num) {
 }
 
 function showRow(idx, name, type, max) {
-  console.log(`|  ${idx}    | ${name}${' '.repeat(max - name.length)}| ${type}  |`)
+  console.log(`|  ${idx}    | ${setColor(name, 'green')}${' '.repeat(max - name.length)}| ${setColor(type, 'green')}  |`)
 }
 
 function goodBuy() {
@@ -216,7 +223,7 @@ async function renameFile(pathFile, newName) {
 
 async function removeFile(pathFile) {
   try {
-    const fullPath = path.join(pathFile.startsWith(os.homedir()) ? null : currentPath, pathFile)
+    const fullPath = getFullPath(pathFile)
 
     await rm(fullPath)
   } catch (err) {
@@ -226,9 +233,9 @@ async function removeFile(pathFile) {
 
 async function copyFile(pathToFile, pathToDirectory) {
   try {
-    const name = pathToFile.split('/').at(-1)
-    const fullPath = path.join(pathToFile.startsWith(os.homedir()) ? null : currentPath, pathToFile)
-    const fullDirectoryPath = path.join(pathToDirectory.startsWith(os.homedir()) ? null : currentPath, pathToDirectory)
+    const name = pathToFile.split('/').at(-1);
+    const fullPath = getFullPath(pathToFile);
+    const fullDirectoryPath = getFullPath(pathToDirectory);
 
     await copy(fullPath, path.join(fullDirectoryPath, name))
   } catch (err) {
@@ -244,3 +251,18 @@ async function moveFile(pathToFile, pathToDirectory) {
     console.log(err)
   }
 }
+
+function getFullPath(pathToFile) {
+  return path.join(pathToFile.startsWith(os.homedir()) ? null : currentPath, pathToFile)
+}
+
+function setColor(text, color) {
+  const colors = {
+    green: 32,
+    yellow: 33,
+    blue: 34
+  }
+
+  return `\x1b[${colors[color]}m ${text} \x1b[0m`
+}
+

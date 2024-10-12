@@ -1,6 +1,6 @@
-import os from 'os'
+import os from 'os';
 
-const commands = {
+export const commands = {
   '--EOL': eol,
   '--cpus': cpus,
   '--homedir': homeDir,
