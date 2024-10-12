@@ -1,5 +1,12 @@
 import os from 'os';
 import { readdir, stat, writeFile, rename, rm, copyFile as copy } from 'fs/promises';
+import { createReadStream } from 'fs';
+import { createInterface } from 'node:readline/promises';
+import {
+  stdin as input,
+  stdout as output,
+} from 'node:process';
+
 import path from 'path';
 import { getInfo } from './os/index.js';
 import { commands as zipCommands } from './zip/index.js';
@@ -8,8 +15,6 @@ import { calculateHash } from './hash/index.js'
 let currentPath = os.homedir()
 console.log(greeting())
 
-showPath()
-
 const commands = {
   'ls': showList,
   'add': addFile,
@@ -17,65 +22,134 @@ const commands = {
   'rm': removeFile,
   'cp': copyFile,
   'mv': moveFile,
+  cat: readFile,
+  cd,
+  up
 }
 
-process.stdin.on('data', async (chunk) => {
-  const data = chunk.toString().trim();
-  const command = data.split(' ')
-
-  if (data === '.exit') {
+const rl = createInterface({ input, output });
+while (true) {
+  const input = await rl.question(setColor(`\nYou are currently in ${currentPath} > \n`, 'blue'))
+  const [command, ...params] = input.split(' ')
+  if (command === '.exit') {
     goodBuy();
     process.exit();
   }
 
-  if (command[0] === 'hash') {
+  if (command === 'hash') {
     console.log('here')
     await calculateHash(getFullPath(command[1]))
   }
 
-  if (data === 'ls') {
+  if (command === 'up') {
+    commands['up']()
+  }
+  if (command === 'cd') {
+    commands['cd'](...params)
+  }
+  if (command === 'ls') {
     await showList()
   }
 
-  if (command[0] === 'os') {
+  if (command === 'os') {
     getInfo(command[1])
   }
 
-  if (command[0] in zipCommands) {
-    zipCommands[command[0]](getFullPath(command[1]), getFullPath(command[2]))
+  if (command in zipCommands) {
+    zipCommands[command](getFullPath(command[1]), getFullPath(command[2]))
   }
 
-  if (!commands[command[0]]) {
+  if (!commands[command]) {
     console.log('\nТакой команды нет\n')
   }
 
-  if (command[0] === 'add') {
+  if (command === 'add') {
+    commands[command](...params)
+  }
+  if (command === 'cat') {
+    commands[command](command[1])
+  }
+
+  if (command === 'rn') {
+    commands[command](command[1], command[2])
+  }
+  if (command === 'rm') {
     commands[command[0]](command[1])
   }
-
-  if (command[0] === 'rn') {
-    commands[command[0]](command[1], command[2])
+  if (command === 'cp') {
+    commands[command](command[1], command[2])
   }
-  if (command[0] === 'rm') {
-    commands[command[0]](command[1])
+  if (command === 'mv') {
+    commands[command](command[1], command[2])
   }
-  if (command[0] === 'cp') {
-    commands[command[0]](command[1], command[2])
-  }
-  if (command[0] === 'mv') {
-    commands[command[0]](command[1], command[2])
-  }
+}
+
+// process.stdin.on('data', async (chunk) => {
+//   const data = chunk.toString().trim();
+//   const command = data.split(' ')
+
+//   if (data === '.exit') {
+//     goodBuy();
+//     process.exit();
+//   }
+
+//   if (command[0] === 'hash') {
+//     console.log('here')
+//     await calculateHash(getFullPath(command[1]))
+//   }
+
+//   if (command[0] === 'up') {
+//     commands['up']()
+//   }
+//   if (command[0] === 'cd') {
+//     commands['cd'](command[1])
+//   }
+//   if (data === 'ls') {
+//     await showList()
+//   }
+
+//   if (command[0] === 'os') {
+//     getInfo(command[1])
+//   }
+
+//   if (command[0] in zipCommands) {
+//     zipCommands[command[0]](getFullPath(command[1]), getFullPath(command[2]))
+//   }
+
+//   if (!commands[command[0]]) {
+//     console.log('\nТакой команды нет\n')
+//   }
+
+//   if (command[0] === 'add') {
+//     commands[command[0]](command[1])
+//   }
+//   if (command[0] === 'cat') {
+//     commands[command[0]](command[1])
+//   }
+
+//   if (command[0] === 'rn') {
+//     commands[command[0]](command[1], command[2])
+//   }
+//   if (command[0] === 'rm') {
+//     commands[command[0]](command[1])
+//   }
+//   if (command[0] === 'cp') {
+//     commands[command[0]](command[1], command[2])
+//   }
+//   if (command[0] === 'mv') {
+//     commands[command[0]](command[1], command[2])
+//   }
 
 
 
-  showPath()
+//   showPath()
 
-})
+// })
 
-process.on('SIGINT', () => {
-  goodBuy()
-  process.exit();
-});
+// process.on('SIGINT', () => {
+//   goodBuy()
+//   process.exit();
+// });
 
 function getName() {
   return process.argv[2].split('=')[1]
@@ -93,61 +167,25 @@ function showPath() {
 
 async function showList() {
   try {
-    const files = await readdir(currentPath);
+    const files = await readdir(currentPath, { withFileTypes: true });
+    const sortedFiles = files.sort((a, b) => a.isFile() - b.isFile())
     const dirsList = []
     const filesList = []
-    let maxLength = 0
 
-    for (const file of files) {
-      const lengthName = file.length;
-      const fullPath = path.join(currentPath, file);
-      const stats = await stat(fullPath);
-
-      if (lengthName > maxLength) maxLength = lengthName;
-
-      if (stats.isDirectory()) {
+    for (const file of sortedFiles) {
+      if (!file.isFile()) {
         dirsList.push({
-          name: file,
+          name: file.name,
           type: 'directory',
-          lengthName
         })
       } else {
         filesList.push({
-          name: file,
+          name: file.name,
           type: 'file',
-          lengthName
         })
       }
     }
-
-    showHeader(maxLength)
-
-    dirsList.forEach((dir, idx) => {
-
-      let left = 0
-      let right = 0
-
-      // if (idx === 1 && maxLength > dir.length) {
-      left = Math.floor((maxLength - dir.name.length) / 2)
-      right = Math.ceil((maxLength - dir.name.length) / 2)
-      // }
-
-      showRow(idx, dir.name, dir.type, maxLength)
-      showTemplate(left + right + dir.name.length + 8)
-    })
-    filesList.forEach((dir, idx) => {
-
-      let left = 0
-      let right = 0
-
-      // if (idx === 1 && maxLength > dir.length) {
-      left = Math.floor((maxLength - dir.name.length) / 2)
-      right = Math.ceil((maxLength - dir.name.length) / 2)
-      // }
-
-      showRow(idx, dir.name, dir.type, maxLength)
-      showTemplate(left + right + dir.name.length + 8)
-    })
+    console.table([...dirsList, ...filesList]);
   } catch (err) {
     console.log(err)
   }
@@ -220,6 +258,19 @@ async function renameFile(pathFile, newName) {
   }
 }
 
+async function readFile(pathFile) {
+  try {
+    const fullPath = getFullPath(pathFile)
+    const readStream = createReadStream(fullPath)
+
+    readStream.on('data', (chunk) => {
+      console.log(chunk.toString())
+    })
+  } catch (err) {
+    console.log(err)
+  }
+}
+
 
 async function removeFile(pathFile) {
   try {
@@ -253,7 +304,7 @@ async function moveFile(pathToFile, pathToDirectory) {
 }
 
 function getFullPath(pathToFile) {
-  return path.join(pathToFile.startsWith(os.homedir()) ? null : currentPath, pathToFile)
+  return path.join(pathToFile.startsWith(os.homedir()) ? '' : currentPath, pathToFile)
 }
 
 function setColor(text, color) {
@@ -264,5 +315,13 @@ function setColor(text, color) {
   }
 
   return `\x1b[${colors[color]}m ${text} \x1b[0m`
+}
+
+function cd(path) {
+  currentPath = getFullPath(path)
+}
+
+function up() {
+  currentPath = currentPath !== os.homedir() ? currentPath.split('/').slice(0, -1).join('/') : currentPath
 }
 
