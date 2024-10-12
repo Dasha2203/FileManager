@@ -1,6 +1,7 @@
-import os from 'os'
-import { readdir, stat, writeFile, rename } from 'fs/promises'
+import os from 'os';
+import { readdir, stat, writeFile, rename, rm, copyFile as copy } from 'fs/promises';
 import path from 'path';
+import { getInfo } from './osSystem.js';
 
 let currentPath = os.homedir()
 console.log(greeting())
@@ -10,10 +11,13 @@ showPath()
 const commands = {
   'ls': showList,
   'add': addFile,
-  'rn': renameFile
+  'rn': renameFile,
+  'rm': removeFile,
+  'cp': copyFile,
+  'mv': moveFile,
 }
 
-process.stdin.on('data', (chunk) => {
+process.stdin.on('data', async (chunk) => {
   const data = chunk.toString().trim();
   const command = data.split(' ')
 
@@ -23,7 +27,11 @@ process.stdin.on('data', (chunk) => {
   }
 
   if (data === 'ls') {
-    showList()
+    await showList()
+  }
+
+  if (command[0] === 'os') {
+    getInfo(command[1])
   }
 
   if (!commands[command[0]]) {
@@ -37,6 +45,20 @@ process.stdin.on('data', (chunk) => {
   if (command[0] === 'rn') {
     commands[command[0]](command[1], command[2])
   }
+  if (command[0] === 'rm') {
+    commands[command[0]](command[1])
+  }
+  if (command[0] === 'cp') {
+    commands[command[0]](command[1], command[2])
+  }
+  if (command[0] === 'mv') {
+    commands[command[0]](command[1], command[2])
+  }
+
+
+
+  showPath()
+
 })
 
 process.on('SIGINT', () => {
@@ -55,7 +77,7 @@ function greeting() {
 }
 
 function showPath() {
-  console.log(`\nYou are currently in ${currentPath} >`)
+  console.log(`\nYou are currently in ${currentPath} >\n`)
 }
 
 function showCurrentDir() {
@@ -97,10 +119,10 @@ async function showList() {
 
       let left = 0
       let right = 0
-  
+
       // if (idx === 1 && maxLength > dir.length) {
-        left = Math.floor((maxLength - dir.name.length) / 2)
-        right = Math.ceil((maxLength - dir.name.length )/ 2)
+      left = Math.floor((maxLength - dir.name.length) / 2)
+      right = Math.ceil((maxLength - dir.name.length) / 2)
       // }
 
       showRow(idx, dir.name, dir.type, maxLength)
@@ -110,10 +132,10 @@ async function showList() {
 
       let left = 0
       let right = 0
-  
+
       // if (idx === 1 && maxLength > dir.length) {
-        left = Math.floor((maxLength - dir.name.length) / 2)
-        right = Math.ceil((maxLength - dir.name.length) / 2)
+      left = Math.floor((maxLength - dir.name.length) / 2)
+      right = Math.ceil((maxLength - dir.name.length) / 2)
       // }
 
       showRow(idx, dir.name, dir.type, maxLength)
@@ -159,7 +181,7 @@ function showTemplate(num) {
 }
 
 function showRow(idx, name, type, max) {
-  console.log(`|  ${idx}    | ${name}${' '.repeat(max-name.length)}| ${type}  |`)
+  console.log(`|  ${idx}    | ${name}${' '.repeat(max - name.length)}| ${type}  |`)
 }
 
 function goodBuy() {
@@ -170,10 +192,10 @@ function goodBuy() {
 
 async function addFile(name) {
   try {
-    await writeFile(path.join(currentPath, name), '', ()=> {
-      
+    await writeFile(path.join(currentPath, name), '', () => {
+
     })
-  } catch(err) {
+  } catch (err) {
     console.log(err)
   }
 }
@@ -184,10 +206,41 @@ async function renameFile(pathFile, newName) {
     const oldPath = path.join(pathFile.startsWith(os.homedir()) ? null : currentPath, pathFile)
     const newPath = path.join(pathFile.startsWith(os.homedir()) ? null : currentPath, pathFile.replace(name, ''), newName)
     await rename(oldPath, newPath, () => {
-      
+
     })
-  } catch(err) {
+  } catch (err) {
     console.log(err)
   }
 }
 
+
+async function removeFile(pathFile) {
+  try {
+    const fullPath = path.join(pathFile.startsWith(os.homedir()) ? null : currentPath, pathFile)
+
+    await rm(fullPath)
+  } catch (err) {
+    console.log(err)
+  }
+}
+
+async function copyFile(pathToFile, pathToDirectory) {
+  try {
+    const name = pathToFile.split('/').at(-1)
+    const fullPath = path.join(pathToFile.startsWith(os.homedir()) ? null : currentPath, pathToFile)
+    const fullDirectoryPath = path.join(pathToDirectory.startsWith(os.homedir()) ? null : currentPath, pathToDirectory)
+
+    await copy(fullPath, path.join(fullDirectoryPath, name))
+  } catch (err) {
+    console.log(err)
+  }
+}
+
+async function moveFile(pathToFile, pathToDirectory) {
+  try {
+    await copyFile(pathToFile, pathToDirectory)
+    await removeFile(pathToFile)
+  } catch (err) {
+    console.log(err)
+  }
+}
