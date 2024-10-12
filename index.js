@@ -1,5 +1,5 @@
 import os from 'os';
-import { readdir, stat, writeFile, rename, rm, copyFile as copy } from 'fs/promises';
+import { readdir, access, writeFile, rename, rm, copyFile as copy } from 'fs/promises';
 import { createReadStream } from 'fs';
 import { createInterface } from 'node:readline/promises';
 import {
@@ -8,9 +8,7 @@ import {
 } from 'node:process';
 
 import path from 'path';
-import { getInfo } from './os/index.js';
-import { commands as zipCommands } from './zip/index.js';
-import { calculateHash } from './hash/index.js'
+import { STATUS } from './const.js';
 
 let currentPath = os.homedir()
 console.log(greeting())
@@ -31,57 +29,63 @@ const rl = createInterface({ input, output });
 while (true) {
   const input = await rl.question(setColor(`\nYou are currently in ${currentPath} > \n`, 'blue'))
   const [command, ...params] = input.split(' ')
+
   if (command === '.exit') {
     goodBuy();
     process.exit();
   }
 
-  if (command === 'hash') {
-    console.log('here')
-    await calculateHash(getFullPath(command[1]))
+  if (commands[command]) {
+    await commands[command](...params)
   }
 
-  if (command === 'up') {
-    commands['up']()
-  }
-  if (command === 'cd') {
-    commands['cd'](...params)
-  }
-  if (command === 'ls') {
-    await showList()
-  }
 
-  if (command === 'os') {
-    getInfo(command[1])
-  }
+  // if (command === 'hash') {
+  //   console.log('here')
+  //   await calculateHash(getFullPath(command[1]))
+  // }
 
-  if (command in zipCommands) {
-    zipCommands[command](getFullPath(command[1]), getFullPath(command[2]))
-  }
+  // if (command === 'up') {
+  //   commands['up']()
+  // }
+  // if (command === 'cd') {
+  //   commands['cd'](...params)
+  // }
+  // if (command === 'ls') {
+  //   await showList()
+  // }
 
-  if (!commands[command]) {
-    console.log('\nТакой команды нет\n')
-  }
+  // if (command === 'os') {
+  //   getInfo(command[1])
+  // }
 
-  if (command === 'add') {
-    commands[command](...params)
-  }
-  if (command === 'cat') {
-    commands[command](command[1])
-  }
+  // if (command in zipCommands) {
+  //   zipCommands[command](getFullPath(command[1]), getFullPath(command[2]))
+  // }
 
-  if (command === 'rn') {
-    commands[command](command[1], command[2])
-  }
-  if (command === 'rm') {
-    commands[command[0]](command[1])
-  }
-  if (command === 'cp') {
-    commands[command](command[1], command[2])
-  }
-  if (command === 'mv') {
-    commands[command](command[1], command[2])
-  }
+  // if (!commands[command]) {
+  //   console.log('\nТакой команды нет\n')
+  // }
+
+  // if (command === 'add') {
+  //   commands[command](...params)
+  // }
+  // if (command === 'cat') {
+  //   commands[command](command[1])
+  // }
+
+  // if (command === 'rn') {
+  //   commands[command](command[1], command[2])
+  // }
+  // if (command === 'rm') {
+  //   commands[command[0]](command[1])
+  // }
+  // if (command === 'cp') {
+  //   commands[command](command[1], command[2])
+  // }
+  // if (command === 'mv') {
+  //   commands[command](command[1], command[2])
+  // }
 }
 
 // process.stdin.on('data', async (chunk) => {
@@ -161,10 +165,6 @@ function greeting() {
   return setColor(`Welcome to the File Manager, ${name}!`, 'yellow');
 }
 
-function showPath() {
-  console.log(setColor(`\nYou are currently in ${currentPath} > \n`, 'blue'))
-}
-
 async function showList() {
   try {
     const files = await readdir(currentPath, { withFileTypes: true });
@@ -191,44 +191,6 @@ async function showList() {
   }
 }
 
-function showHeader(max) {
-  const headers = ['index', 'Name', 'Type']
-
-  let str = ``
-  let leftMax = 0
-  let rightMax = 0
-
-  headers.forEach((item, idx) => {
-    let left = 0
-    let right = 0
-
-    if (idx === 1 && max > item.length) {
-      left = Math.floor((max - item.length) / 2)
-      right = Math.ceil((max - item.length) / 2)
-    }
-    str += '| ' + (left ? ' '.repeat(left) : '') + item + (right ? ' '.repeat(right) : '') + ' '
-
-    if (idx === headers.length - 1) {
-      str += '     |'
-    }
-
-    if (left > leftMax) leftMax = left
-    if (right > rightMax) rightMax = right
-  })
-  showTemplate(leftMax + rightMax + headers[1].length + 8)
-  console.log(str)
-  showTemplate(leftMax + rightMax + headers[1].length + 8)
-  // console.log(`| ${headers[0]} | ${headers[1]} | ${headers[2]} |`)
-}
-
-function showTemplate(num) {
-  console.log(`+--------${'-'.repeat(num)}------+`)
-}
-
-function showRow(idx, name, type, max) {
-  console.log(`|  ${idx}    | ${setColor(name, 'green')}${' '.repeat(max - name.length)}| ${setColor(type, 'green')}  |`)
-}
-
 function goodBuy() {
   const name = getName();
 
@@ -247,12 +209,15 @@ async function addFile(name) {
 
 async function renameFile(pathFile, newName) {
   try {
-    const name = pathFile.split('/').at(-1)
-    const oldPath = path.join(pathFile.startsWith(os.homedir()) ? null : currentPath, pathFile)
-    const newPath = path.join(pathFile.startsWith(os.homedir()) ? null : currentPath, pathFile.replace(name, ''), newName)
-    await rename(oldPath, newPath, () => {
+    const name = pathFile.split('/').at(-1);
+    const oldPath = path.join(pathFile.startsWith(os.homedir()) ? null : currentPath, pathFile);
+    const newPath = path.join(pathFile.startsWith(os.homedir()) ? null : currentPath, pathFile.replace(name, ''), newName);
+    const isExisting = await isExist(oldPath);
 
-    })
+    if (isExisting) {
+      await rename(oldPath, newPath);
+    }
+    
   } catch (err) {
     console.log(err)
   }
@@ -260,23 +225,29 @@ async function renameFile(pathFile, newName) {
 
 async function readFile(pathFile) {
   try {
-    const fullPath = getFullPath(pathFile)
-    const readStream = createReadStream(fullPath)
+    const fullPath = getFullPath(pathFile);
+    const isExisting = await isExist(fullPath);
 
-    readStream.on('data', (chunk) => {
-      console.log(chunk.toString())
-    })
+    if (isExisting) {
+      const readStream = createReadStream(fullPath);
+
+      readStream.on('data', (chunk) => {
+        console.log(chunk.toString())
+      })
+    }
   } catch (err) {
     console.log(err)
   }
 }
 
-
 async function removeFile(pathFile) {
   try {
-    const fullPath = getFullPath(pathFile)
+    const fullPath = getFullPath(pathFile);
+    const isExisting = await isExist(fullPath);
 
-    await rm(fullPath)
+    if (isExisting) {
+      await rm(fullPath);
+    }
   } catch (err) {
     console.log(err)
   }
@@ -287,8 +258,12 @@ async function copyFile(pathToFile, pathToDirectory) {
     const name = pathToFile.split('/').at(-1);
     const fullPath = getFullPath(pathToFile);
     const fullDirectoryPath = getFullPath(pathToDirectory);
+    const isExisting = await isExist(fullPath) && await isExist(fullDirectoryPath);
 
-    await copy(fullPath, path.join(fullDirectoryPath, name))
+    if (isExisting) {
+      await copy(fullPath, path.join(fullDirectoryPath, name));
+      console.log(setColor(STATUS.SUCCESS, 'green'));
+    }
   } catch (err) {
     console.log(err)
   }
@@ -296,10 +271,10 @@ async function copyFile(pathToFile, pathToDirectory) {
 
 async function moveFile(pathToFile, pathToDirectory) {
   try {
-    await copyFile(pathToFile, pathToDirectory)
-    await removeFile(pathToFile)
+    await copyFile(pathToFile, pathToDirectory);
+    await removeFile(pathToFile);
   } catch (err) {
-    console.log(err)
+    console.log(err);
   }
 }
 
@@ -311,17 +286,34 @@ function setColor(text, color) {
   const colors = {
     green: 32,
     yellow: 33,
-    blue: 34
+    blue: 34,
+    red: 31
   }
 
   return `\x1b[${colors[color]}m ${text} \x1b[0m`
 }
 
-function cd(path) {
-  currentPath = getFullPath(path)
+async function cd(path) {
+  const fullPath = getFullPath(path);
+  const isExisting = await isExist(fullPath);
+
+  if (isExisting) {
+    currentPath = fullPath;
+  }
 }
 
 function up() {
   currentPath = currentPath !== os.homedir() ? currentPath.split('/').slice(0, -1).join('/') : currentPath
+}
+
+async function isExist(path) {
+  try {
+    await access(path)
+
+    return true
+  } catch (err) {
+    console.log(setColor(STATUS.ERROR_PATH, 'red'));
+    return false
+  }
 }
 
