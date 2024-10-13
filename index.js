@@ -1,7 +1,11 @@
 import os from 'os';
-import { readdir, access, writeFile, rename, rm, copyFile as copy } from 'fs/promises';
+import { readdir, writeFile, rename, rm, copyFile as copy } from 'fs/promises';
 import { createReadStream } from 'fs';
 import { createInterface } from 'node:readline/promises';
+import { setColor } from './colors/index.js';
+import { getFullPath } from './libs/getFullPath.js';
+import { isExist } from './libs/isExist.js';
+
 import {
   stdin as input,
   stdout as output,
@@ -9,6 +13,8 @@ import {
 
 import path from 'path';
 import { STATUS } from './const.js';
+import { calculateHash } from './hash/index.js';
+import { getInfo } from './os/index.js';
 
 let currentPath = os.homedir()
 console.log(greeting())
@@ -20,15 +26,18 @@ const commands = {
   'rm': removeFile,
   'cp': copyFile,
   'mv': moveFile,
+  os: getInfo,
+  hash: async (pathFile) => await calculateHash(getFullPath(pathFile, currentPath)),
   cat: readFile,
   cd,
   up
 }
 
 const rl = createInterface({ input, output });
+
 while (true) {
-  const input = await rl.question(setColor(`\nYou are currently in ${currentPath} > \n`, 'blue'))
-  const [command, ...params] = input.split(' ')
+  const input = await rl.question(setColor(`\nYou are currently in ${currentPath} > \n`, 'blue'));
+  const [command, ...params] = input.split(' ');
 
   if (command === '.exit') {
     goodBuy();
@@ -36,7 +45,7 @@ while (true) {
   }
 
   if (commands[command]) {
-    await commands[command](...params)
+    await commands[command](...params);
   }
 
 
@@ -199,11 +208,9 @@ function goodBuy() {
 
 async function addFile(name) {
   try {
-    await writeFile(path.join(currentPath, name), '', () => {
-
-    })
+    await writeFile(path.join(currentPath, name), '');
   } catch (err) {
-    console.log(err)
+    console.log(err);
   }
 }
 
@@ -217,32 +224,34 @@ async function renameFile(pathFile, newName) {
     if (isExisting) {
       await rename(oldPath, newPath);
     }
-    
   } catch (err) {
-    console.log(err)
+    showDefaultError();
   }
 }
 
 async function readFile(pathFile) {
-  try {
-    const fullPath = getFullPath(pathFile);
+  return new Promise(async (resolve, reject) => {
+    const fullPath = getFullPath(pathFile, currentPath);
     const isExisting = await isExist(fullPath);
 
     if (isExisting) {
-      const readStream = createReadStream(fullPath);
-
+      const readStream = createReadStream(fullPath, { encoding: 'utf8' });
       readStream.on('data', (chunk) => {
-        console.log(chunk.toString())
+        console.log(chunk.toString());
       })
+
+      readStream.on('end', () => {
+        resolve();
+      });
+    } else {
+      resolve();
     }
-  } catch (err) {
-    console.log(err)
-  }
+  })
 }
 
 async function removeFile(pathFile) {
   try {
-    const fullPath = getFullPath(pathFile);
+    const fullPath = getFullPath(pathFile, currentPath);
     const isExisting = await isExist(fullPath);
 
     if (isExisting) {
@@ -256,8 +265,8 @@ async function removeFile(pathFile) {
 async function copyFile(pathToFile, pathToDirectory) {
   try {
     const name = pathToFile.split('/').at(-1);
-    const fullPath = getFullPath(pathToFile);
-    const fullDirectoryPath = getFullPath(pathToDirectory);
+    const fullPath = getFullPath(pathToFile, currentPath);
+    const fullDirectoryPath = getFullPath(pathToDirectory, currentPath);
     const isExisting = await isExist(fullPath) && await isExist(fullDirectoryPath);
 
     if (isExisting) {
@@ -278,23 +287,8 @@ async function moveFile(pathToFile, pathToDirectory) {
   }
 }
 
-function getFullPath(pathToFile) {
-  return path.join(pathToFile.startsWith(os.homedir()) ? '' : currentPath, pathToFile)
-}
-
-function setColor(text, color) {
-  const colors = {
-    green: 32,
-    yellow: 33,
-    blue: 34,
-    red: 31
-  }
-
-  return `\x1b[${colors[color]}m ${text} \x1b[0m`
-}
-
 async function cd(path) {
-  const fullPath = getFullPath(path);
+  const fullPath = getFullPath(path, currentPath);
   const isExisting = await isExist(fullPath);
 
   if (isExisting) {
@@ -306,14 +300,8 @@ function up() {
   currentPath = currentPath !== os.homedir() ? currentPath.split('/').slice(0, -1).join('/') : currentPath
 }
 
-async function isExist(path) {
-  try {
-    await access(path)
-
-    return true
-  } catch (err) {
-    console.log(setColor(STATUS.ERROR_PATH, 'red'));
-    return false
-  }
+function showDefaultError() {
+  console.log(setColor(STATUS.ERROR, 'red'))
 }
+
 
