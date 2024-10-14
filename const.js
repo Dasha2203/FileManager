@@ -1,5 +1,5 @@
 export const STATUS = {
-  ERROR_PATH: 'Path error',
+  INVALID: 'Invalid input',
   SUCCESS: 'Done successfully!',
-  ERROR: 'Operation error'
+  FAILED: 'Operation failed'
 }

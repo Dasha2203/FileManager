@@ -4,6 +4,7 @@ import { createReadStream } from 'fs';
 import { createInterface } from 'node:readline/promises';
 import { setColor } from './colors/index.js';
 import { getFullPath } from './libs/getFullPath.js';
+import { compress, decompress } from './zip/index.js';
 import { isExist } from './libs/isExist.js';
 
 import {
@@ -20,14 +21,23 @@ let currentPath = os.homedir()
 console.log(greeting())
 
 const commands = {
-  'ls': showList,
-  'add': addFile,
-  'rn': renameFile,
-  'rm': removeFile,
-  'cp': copyFile,
-  'mv': moveFile,
+  ls: showList,
+  add: addFile,
+  rn: renameFile,
+  rm: removeFile,
+  cp: copyFile,
+  mv: moveFile,
+  compress: handleCompress,
+  decompress: handleDeCompress,
   os: getInfo,
-  hash: async (pathFile) => await calculateHash(getFullPath(pathFile, currentPath)),
+  hash: async (pathFile) => {
+    const fullPath = getFullPath(pathFile, currentPath);
+    const isExisting = await isExist(fullPath);
+
+    if (isExisting) {
+      await calculateHash(getFullPath(pathFile, currentPath));
+    }
+  },
   cat: readFile,
   cd,
   up
@@ -35,137 +45,31 @@ const commands = {
 
 const rl = createInterface({ input, output });
 
+process.on('exit', () => {
+  goodBuy();
+})
+
 while (true) {
-  const input = await rl.question(setColor(`\nYou are currently in ${currentPath} > \n`, 'blue'));
-  const [command, ...params] = input.split(' ');
+  try {
+    const input = await rl.question(setColor(`\nYou are currently in ${currentPath} > \n`, 'blue'));
+    const [command, ...params] = input.split(' ');
 
-  if (command === '.exit') {
-    goodBuy();
-    process.exit();
+    if (command === '.exit') {
+      process.exit();
+    }
+
+    if (commands[command]) {
+      await commands[command](...params);
+    } else {
+      console.log(setColor(STATUS.INVALID, 'red'));
+    }
+  } catch {
+    showDefaultError()
   }
-
-  if (commands[command]) {
-    await commands[command](...params);
-  }
-
-
-  // if (command === 'hash') {
-  //   console.log('here')
-  //   await calculateHash(getFullPath(command[1]))
-  // }
-
-  // if (command === 'up') {
-  //   commands['up']()
-  // }
-  // if (command === 'cd') {
-  //   commands['cd'](...params)
-  // }
-  // if (command === 'ls') {
-  //   await showList()
-  // }
-
-  // if (command === 'os') {
-  //   getInfo(command[1])
-  // }
-
-  // if (command in zipCommands) {
-  //   zipCommands[command](getFullPath(command[1]), getFullPath(command[2]))
-  // }
-
-  // if (!commands[command]) {
-  //   console.log('\nТакой команды нет\n')
-  // }
-
-  // if (command === 'add') {
-  //   commands[command](...params)
-  // }
-  // if (command === 'cat') {
-  //   commands[command](command[1])
-  // }
-
-  // if (command === 'rn') {
-  //   commands[command](command[1], command[2])
-  // }
-  // if (command === 'rm') {
-  //   commands[command[0]](command[1])
-  // }
-  // if (command === 'cp') {
-  //   commands[command](command[1], command[2])
-  // }
-  // if (command === 'mv') {
-  //   commands[command](command[1], command[2])
-  // }
 }
 
-// process.stdin.on('data', async (chunk) => {
-//   const data = chunk.toString().trim();
-//   const command = data.split(' ')
-
-//   if (data === '.exit') {
-//     goodBuy();
-//     process.exit();
-//   }
-
-//   if (command[0] === 'hash') {
-//     console.log('here')
-//     await calculateHash(getFullPath(command[1]))
-//   }
-
-//   if (command[0] === 'up') {
-//     commands['up']()
-//   }
-//   if (command[0] === 'cd') {
-//     commands['cd'](command[1])
-//   }
-//   if (data === 'ls') {
-//     await showList()
-//   }
-
-//   if (command[0] === 'os') {
-//     getInfo(command[1])
-//   }
-
-//   if (command[0] in zipCommands) {
-//     zipCommands[command[0]](getFullPath(command[1]), getFullPath(command[2]))
-//   }
-
-//   if (!commands[command[0]]) {
-//     console.log('\nТакой команды нет\n')
-//   }
-
-//   if (command[0] === 'add') {
-//     commands[command[0]](command[1])
-//   }
-//   if (command[0] === 'cat') {
-//     commands[command[0]](command[1])
-//   }
-
-//   if (command[0] === 'rn') {
-//     commands[command[0]](command[1], command[2])
-//   }
-//   if (command[0] === 'rm') {
-//     commands[command[0]](command[1])
-//   }
-//   if (command[0] === 'cp') {
-//     commands[command[0]](command[1], command[2])
-//   }
-//   if (command[0] === 'mv') {
-//     commands[command[0]](command[1], command[2])
-//   }
-
-
-
-//   showPath()
-
-// })
-
-// process.on('SIGINT', () => {
-//   goodBuy()
-//   process.exit();
-// });
-
 function getName() {
-  return process.argv[2].split('=')[1]
+  return process.argv[2]?.split('=')[1] || 'Anonim';
 }
 
 function greeting() {
@@ -208,6 +112,10 @@ function goodBuy() {
 
 async function addFile(name) {
   try {
+    if (!name) {
+      console.log(setColor(STATUS.INVALID, 'red'));
+      return;
+    }
     await writeFile(path.join(currentPath, name), '');
   } catch (err) {
     console.log(err);
@@ -216,6 +124,10 @@ async function addFile(name) {
 
 async function renameFile(pathFile, newName) {
   try {
+    if (!pathFile || !newName) {
+      console.log(setColor(STATUS.INVALID, 'red'));
+      return;
+    }
     const name = pathFile.split('/').at(-1);
     const oldPath = path.join(pathFile.startsWith(os.homedir()) ? null : currentPath, pathFile);
     const newPath = path.join(pathFile.startsWith(os.homedir()) ? null : currentPath, pathFile.replace(name, ''), newName);
@@ -231,6 +143,10 @@ async function renameFile(pathFile, newName) {
 
 async function readFile(pathFile) {
   return new Promise(async (resolve, reject) => {
+    if (!pathFile) {
+      console.log(setColor(STATUS.INVALID, 'red'));
+      return;
+    }
     const fullPath = getFullPath(pathFile, currentPath);
     const isExisting = await isExist(fullPath);
 
@@ -251,6 +167,10 @@ async function readFile(pathFile) {
 
 async function removeFile(pathFile) {
   try {
+    if (!pathFile) {
+      console.log(setColor(STATUS.INVALID, 'red'));
+      return;
+    }
     const fullPath = getFullPath(pathFile, currentPath);
     const isExisting = await isExist(fullPath);
 
@@ -264,6 +184,10 @@ async function removeFile(pathFile) {
 
 async function copyFile(pathToFile, pathToDirectory) {
   try {
+    if (!pathToFile || !pathToDirectory) {
+      console.log(setColor(STATUS.INVALID, 'red'));
+      return;
+    }
     const name = pathToFile.split('/').at(-1);
     const fullPath = getFullPath(pathToFile, currentPath);
     const fullDirectoryPath = getFullPath(pathToDirectory, currentPath);
@@ -278,8 +202,37 @@ async function copyFile(pathToFile, pathToDirectory) {
   }
 }
 
+async function handleCompress(pathToFile, pathDestination) {
+  if (!pathToFile || !pathDestination) {
+    console.log(setColor(STATUS.INVALID, 'red'));
+    return;
+  }
+  const fullPath = getFullPath(pathToFile, currentPath);
+  const isExisting = await isExist(fullPath);
+
+  if (isExisting) {
+    compress(pathToFile, pathDestination)
+  }
+}
+async function handleDeCompress(pathToFile, pathDestination) {
+  if (!pathToFile || !pathDestination) {
+    console.log(setColor(STATUS.INVALID, 'red'));
+    return;
+  }
+  const fullPath = getFullPath(pathToFile, currentPath);
+  const isExisting = await isExist(fullPath);
+
+  if (isExisting) {
+    decompress(pathToFile, pathDestination)
+  }
+}
+
 async function moveFile(pathToFile, pathToDirectory) {
   try {
+    if (!pathToFile || !pathToDirectory) {
+      console.log(setColor(STATUS.INVALID, 'red'));
+      return;
+    }
     await copyFile(pathToFile, pathToDirectory);
     await removeFile(pathToFile);
   } catch (err) {
@@ -288,6 +241,10 @@ async function moveFile(pathToFile, pathToDirectory) {
 }
 
 async function cd(path) {
+  if (!path) {
+    console.log(setColor(STATUS.INVALID, 'red'));
+    return;
+  }
   const fullPath = getFullPath(path, currentPath);
   const isExisting = await isExist(fullPath);
 
@@ -301,7 +258,7 @@ function up() {
 }
 
 function showDefaultError() {
-  console.log(setColor(STATUS.ERROR, 'red'))
+  console.log(setColor(STATUS.FAILED, 'red'))
 }
 
 

@@ -8,7 +8,7 @@ export async function isExist(path) {
 
     return true;
   } catch (err) {
-    console.log(setColor(STATUS.ERROR_PATH, 'red'));
+    console.log(setColor(STATUS.FAILED, 'red'));
     return false;
   }
 }
